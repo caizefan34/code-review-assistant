@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="智能代码审查助手 — 支持 C++ 与 Python 的静态分析与 LLM 智能审查" />
+    <title>智能代码审查助手</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">{ }</div>
+        <div class="brand-text">
+          <h1>智能代码审查助手</h1>
+          <p>支持 C++ · Python 静态分析 + LLM 智能审查</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-ghost" type="button" id="btn-settings" title="LLM 配置">⚙ LLM</button>
+        <button class="btn btn-ghost" type="button" id="btn-theme" title="切换主题">☾</button>
+        <button class="btn btn-ghost" type="button" id="btn-export">导出报告</button>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <section class="toolbar">
+        <div class="toolbar-group">
+          <label class="field-label" for="mode-select">审查模式</label>
+          <select id="mode-select" class="select">
+            <option value="static">静态规则</option>
+            <option value="hybrid" selected>混合（静态 + LLM）</option>
+            <option value="llm">仅 LLM</option>
+          </select>
+        </div>
+        <div class="toolbar-group">
+          <label class="field-label" for="lang-select">语言</label>
+          <select id="lang-select" class="select">
+            <option value="auto">自动检测</option>
+            <option value="python">Python</option>
+            <option value="cpp">C++</option>
+          </select>
+        </div>
+        <div class="toolbar-group">
+          <label class="field-label" for="file-input">上传文件</label>
+          <input id="file-input" type="file" accept=".py,.cpp,.cc,.cxx,.h,.hpp,.hxx,.c,.txt" class="file-input" />
+        </div>
+        <div class="toolbar-group toolbar-grow">
+          <label class="field-label" for="code-input">代码</label>
+          <div class="toolbar-btns">
+            <button class="btn btn-sm btn-ghost" type="button" data-sample="python">Python 示例</button>
+            <button class="btn btn-sm btn-ghost" type="button" data-sample="cpp">C++ 示例</button>
+            <button class="btn btn-sm btn-ghost" type="button" id="btn-clear">清空</button>
+          </div>
+        </div>
+        <button class="btn btn-accent" type="button" id="btn-optimize" title="使用 LLM 自动修复全部问题">AI 优化代码</button>
+        <button class="btn btn-primary" type="button" id="btn-review">开始审查</button>
+      </section>
+
+      <div class="workspace">
+        <div class="panel editor-panel">
+          <div class="panel-header">
+            <span class="panel-title">源代码</span>
+            <span class="badge" id="detected-lang">未检测</span>
+          </div>
+          <div class="editor-wrap">
+            <div class="line-numbers" id="line-numbers" aria-hidden="true">1</div>
+            <textarea
+              id="code-input"
+              class="code-editor"
+              spellcheck="false"
+              placeholder="粘贴或输入 C++ / Python 代码，然后点击「开始审查」…"
+            ></textarea>
+          </div>
+          <div class="panel-footer">
+            <span id="code-stats">0 行 · 0 字符</span>
+          </div>
+        </div>
+
+        <div class="panel result-panel">
+          <div class="panel-header">
+            <span class="panel-title">审查结果</span>
+            <div class="score-ring" id="score-ring" data-score="—">
+              <svg viewBox="0 0 36 36" aria-hidden="true">
+                <path class="score-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path class="score-fill" id="score-fill" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              </svg>
+              <span class="score-text" id="score-text">—</span>
+            </div>
+          </div>
+
+          <div class="llm-status" id="llm-status"></div>
+
+          <div class="summary-bar" id="summary-bar">
+            <div class="summary-item critical"><span id="count-critical">0</span> 严重</div>
+            <div class="summary-item warning"><span id="count-warning">0</span> 警告</div>
+            <div class="summary-item info"><span id="count-info">0</span> 提示</div>
+            <div class="summary-item suggestion"><span id="count-suggestion">0</span> 建议</div>
+          </div>
+
+          <div class="filter-bar">
+            <button class="filter-chip active" data-filter="all">全部</button>
+            <button class="filter-chip" data-filter="security">安全</button>
+            <button class="filter-chip" data-filter="bug">缺陷</button>
+            <button class="filter-chip" data-filter="performance">性能</button>
+            <button class="filter-chip" data-filter="style">风格</button>
+            <button class="filter-chip" data-filter="best-practice">最佳实践</button>
+          </div>
+
+          <div class="issues-list" id="issues-list">
+            <div class="empty-state">
+              <div class="empty-icon" aria-hidden="true">🔍</div>
+              <p>输入代码并点击「开始审查」</p>
+              <p class="empty-hint">静态规则 + LLM 深度分析，支持 AI 自动修复</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- LLM 配置弹窗 -->
+    <dialog class="settings-dialog" id="settings-dialog">
+      <div class="dialog-header">
+        <h2>LLM 配置</h2>
+        <button class="btn btn-ghost btn-sm" type="button" id="btn-close-settings">✕</button>
+      </div>
+      <form class="dialog-body" id="llm-config-form">
+        <p class="dialog-intro">填写你的 LLM API 信息，保存后可在混合 / LLM 模式下使用。配置仅保存在本机浏览器中。</p>
+
+        <div class="form-field">
+          <label class="form-label" for="cfg-base-url">API 地址 (baseUrl)</label>
+          <input
+            id="cfg-base-url"
+            class="form-input"
+            type="url"
+            placeholder="https://api.openai.com/v1"
+            autocomplete="off"
+            required
+          />
+          <span class="form-hint">OpenAI 兼容地址，需包含 /v1 路径</span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label" for="cfg-api-key">API 密钥 (apiKey)</label>
+          <input
+            id="cfg-api-key"
+            class="form-input"
+            type="password"
+            placeholder="sk-xxxxxxxx"
+            autocomplete="off"
+          />
+          <span class="form-hint">本地 Ollama 等无需鉴权的服务可留空</span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label" for="cfg-model">模型名称 (model)</label>
+          <input
+            id="cfg-model"
+            class="form-input"
+            type="text"
+            placeholder="gpt-4o"
+            autocomplete="off"
+            required
+          />
+          <span class="form-hint">如 gpt-4o、deepseek-chat、qwen-plus</span>
+        </div>
+
+        <div class="config-status" id="config-status"></div>
+
+        <div class="dialog-actions">
+          <button class="btn btn-ghost" type="button" id="btn-clear-config">清除配置</button>
+          <button class="btn btn-primary" type="submit">保存配置</button>
+        </div>
+      </form>
+    </dialog>
+
+    <footer class="app-footer">
+      <p>静态规则本地运行 · LLM 配置请在网页 ⚙ 设置中填写</p>
+    </footer>
+
+    <script src="./llm-config.js"></script>
+    <script src="./review-engine.js"></script>
+    <script src="./llm-client.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
